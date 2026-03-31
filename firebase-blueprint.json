@@ -1,0 +1,78 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents a user of the system (Student or Admin).",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "avatar": { "type": "string", "format": "uri" },
+        "role": { "type": "string", "enum": ["student", "admin"] },
+        "targetBand": { "type": "number" },
+        "currentBand": { "type": "number" },
+        "joinDate": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["active", "inactive"] }
+      },
+      "required": ["uid", "name", "email", "role"]
+    },
+    "PracticeAttempt": {
+      "title": "PracticeAttempt",
+      "description": "A single practice session result.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string", "description": "UID of the student" },
+        "type": { "type": "string", "enum": ["Writing", "Reading", "Listening", "Speaking"] },
+        "title": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "score": { "type": "number" },
+        "feedback": { "type": "string" },
+        "evaluation": { "type": "object" },
+        "content": { "type": "string" },
+        "prompt": { "type": "string" }
+      },
+      "required": ["studentId", "type", "title", "date", "score"]
+    },
+    "Progress": {
+      "title": "Progress",
+      "description": "User progress in a specific skill test.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The UID of the user." },
+        "skill": { "type": "string", "enum": ["Listening", "Reading", "Speaking", "Writing"] },
+        "isFullTest": { "type": "boolean" },
+        "answers": { "type": "object", "description": "Map of question IDs to user answers." },
+        "activeSectionIdx": { "type": "integer" },
+        "submittedSections": { "type": "array", "items": { "type": "boolean" } },
+        "currentPassageIdx": { "type": "integer" },
+        "submittedPassages": { "type": "array", "items": { "type": "boolean" } },
+        "fullTestTranscripts": { "type": "object" },
+        "currentPart": { "type": "integer" },
+        "submittedParts": { "type": "array", "items": { "type": "boolean" } },
+        "content1": { "type": "string" },
+        "content2": { "type": "string" },
+        "submittedTasks": { "type": "array", "items": { "type": "boolean" } },
+        "timeLeft": { "type": "integer" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "testId": { "type": "string" }
+      },
+      "required": ["userId", "skill", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/attempts/{attemptId}": {
+      "schema": "PracticeAttempt",
+      "description": "Practice session results"
+    },
+    "/progress/{progressId}": {
+      "schema": "Progress",
+      "description": "Stores saved progress for students across different skills and test types."
+    }
+  }
+}

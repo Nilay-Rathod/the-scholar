@@ -1,0 +1,5 @@
+{
+  "name": "The Scholar",
+  "description": "A prestigious IELTS preparation platform with dual-access portals for Admins and Students, featuring exam scheduling, content management, and AI-powered evaluation.",
+  "requestFramePermissions": ["camera", "microphone"]
+}

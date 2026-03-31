@@ -1,0 +1,256 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {uid}
+    // Fields:
+    //   - uid: string (required) - Firebase Auth UID
+    //   - name: string (required)
+    //   - email: string (required, format: email)
+    //   - avatar: string (optional, format: uri)
+    //   - role: string (required, enum: ["student", "admin"])
+    //   - targetBand: number (optional)
+    //   - currentBand: number (optional)
+    //   - joinDate: string (optional, format: date-time)
+    //   - status: string (optional, enum: ["active", "inactive"])
+    //
+    // Collection: attempts
+    // Document ID: {attemptId}
+    // Fields:
+    //   - id: string (required)
+    //   - studentId: string (required) - UID of the student
+    //   - type: string (required, enum: ["Writing", "Reading", "Listening", "Speaking"])
+    //   - title: string (required)
+    //   - date: string (required, format: date-time)
+    //   - score: number (required)
+    //   - feedback: string (optional)
+    //   - evaluation: map (optional)
+    //   - content: string (optional)
+    //   - prompt: string (optional)
+    //
+    // ===============================================================
+
+    // Collection: progress
+    // Document ID: {progressId}
+    // Fields:
+    //   - userId: string (required) - UID of the student
+    //   - skill: string (required, enum: ["Listening", "Reading", "Speaking", "Writing"])
+    //   - isFullTest: boolean (optional)
+    //   - answers: map (optional)
+    //   - activeSectionIdx: number (optional)
+    //   - submittedSections: list (optional)
+    //   - currentPassageIdx: number (optional)
+    //   - submittedPassages: list (optional)
+    //   - fullTestTranscripts: map (optional)
+    //   - currentPart: number (optional)
+    //   - submittedParts: list (optional)
+    //   - content1: string (optional)
+    //   - content2: string (optional)
+    //   - submittedTasks: list (optional)
+    //   - timeLeft: number (optional)
+    //   - updatedAt: timestamp (required)
+    //   - testId: string (optional)
+    //
+    // ===============================================================
+
+    // Collection: progress
+    // Document ID: {progressId}
+    // Fields:
+    //   - userId: string (required) - UID of the student
+    //   - skill: string (required, enum: ["Listening", "Reading", "Speaking", "Writing"])
+    //   - isFullTest: boolean (optional)
+    //   - answers: map (optional)
+    //   - activeSectionIdx: number (optional)
+    //   - submittedSections: list (optional)
+    //   - currentPassageIdx: number (optional)
+    //   - submittedPassages: list (optional)
+    //   - fullTestTranscripts: map (optional)
+    //   - currentPart: number (optional)
+    //   - submittedParts: list (optional)
+    //   - content1: string (optional)
+    //   - content2: string (optional)
+    //   - submittedTasks: list (optional)
+    //   - timeLeft: number (optional)
+    //   - updatedAt: timestamp (required)
+    //   - testId: string (optional)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated() && (
+        (request.auth.token.keys().contains('email') && request.auth.token.email.matches("(?i)nilayrathod000@gmail.com")) || 
+        request.auth.uid == "fl8iYfbOPhczkspJp2IP7qJoEBb2"
+      );
+    }
+
+    function isAdmin() {
+      return isSuperAdmin() || (
+        isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+      );
+    }
+
+    function isTeacher() {
+      return isSuperAdmin() || (
+        isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher' || 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    // ===============================================================
+    // GLOBAL OVERRIDE (Ensures nilayrathod000@gmail.com always has access)
+    // ===============================================================
+    match /{allPaths=**} {
+      allow read, write: if isSuperAdmin();
+    }
+
+    function isValidUser(data) {
+      // Relaxed validation to allow partial updates and flexible field structures
+      return data.keys().hasAny(['email', 'role']) &&
+             (!data.keys().hasAll(['email']) || data.email is string) &&
+             (!data.keys().hasAll(['role']) || data.role in ['student', 'admin', 'teacher']);
+    }
+
+    function isValidAttempt(data) {
+      return data.keys().hasAll(['studentId', 'type', 'title', 'date', 'score']) &&
+             data.studentId is string && data.studentId.size() > 0 &&
+             data.type in ['Writing', 'Reading', 'Listening', 'Speaking'] &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 500 &&
+             data.date is string && data.date.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$") &&
+             data.score is number && data.score >= 0 && data.score <= 9;
+    }
+
+    function isValidTest(data) {
+      return data.keys().hasAll(['type', 'skill', 'title', 'content', 'status']) &&
+             data.type in ['Academic', 'General Training'] &&
+             data.skill in ['Reading', 'Listening', 'Writing', 'Speaking'] &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 500 &&
+             data.content is string && data.content.size() > 0 && data.content.size() < 50000 &&
+             data.status in ['active', 'archived'];
+    }
+
+    function isValidSchedule(data) {
+      return data.keys().hasAll(['title', 'description', 'dueDate', 'type', 'status']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.description is string && data.description.size() < 1000 &&
+             data.dueDate is string && data.dueDate.matches("^\\d{4}-\\d{2}-\\d{2}.*") &&
+             data.type in ['Exam', 'Practice', 'Submission'] &&
+             data.status in ['upcoming', 'active', 'completed'];
+    }
+
+    function isValidProgress(data) {
+      return data.keys().hasAll(['userId', 'skill', 'updatedAt']) &&
+             data.userId is string && data.userId.size() > 0 &&
+             data.skill in ['Listening', 'Reading', 'Speaking', 'Writing'] &&
+             data.updatedAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{uid} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(uid) || isAdmin());
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && (isAdmin() || (isOwner(uid) && request.resource.data.role == resource.data.role) || isTeacher());
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.email == request.auth.token.email);
+    }
+
+    match /attempts/{attemptId} {
+      allow read: if isAuthenticated() && (resource.data.studentId == request.auth.uid || isTeacher() || isAdmin());
+      allow create: if isAuthenticated() && isValidAttempt(request.resource.data) && (request.resource.data.studentId == request.auth.uid || isTeacher() || isAdmin());
+      allow update: if isAuthenticated() && (resource.data.studentId == request.auth.uid || isTeacher() || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /tests/{testId} {
+      allow read: if request.auth != null;
+      allow create: if (isAdmin() || isTeacher()) && isValidTest(request.resource.data);
+      allow update: if (isAdmin() || isTeacher()) && isValidTest(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /schedule/{taskId} {
+      allow read: if request.auth != null;
+      allow create: if (isAdmin() || isTeacher()) && isValidSchedule(request.resource.data);
+      allow update: if (isAdmin() || isTeacher()) && isValidSchedule(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /progress/{progressId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isTeacher() || isAdmin());
+      allow create: if isAuthenticated() && (request.resource.data.userId == request.auth.uid || isTeacher() || isAdmin());
+      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isTeacher() || isAdmin());
+      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isTeacher() || isAdmin());
+    }
+
+    match /notifications/{notifId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    match /classes/{classId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() || isTeacher();
+      allow update: if isAdmin() || isTeacher();
+      allow delete: if isAdmin() || isTeacher();
+    }
+
+    match /assignments/{assignmentId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() || isTeacher();
+      allow update: if isAdmin() || isTeacher();
+      allow delete: if isAdmin();
+    }
+
+    match /blogs/{blogId} {
+      allow read: if true;
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /pages/{pageId} {
+      allow read: if true;
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /alerts/{alertId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /teacher_invites/{inviteId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin();
+      allow update: if isAdmin() || (isAuthenticated() && resource.data.email == request.auth.token.email);
+      allow delete: if isAdmin();
+    }
+    
+    // Sample Library
+    match /samples/{sampleId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin() || isTeacher();
+    }
+  }
+}
