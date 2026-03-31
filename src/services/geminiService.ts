@@ -15,7 +15,7 @@ const GEMINI_KEYS = [
 const OPENAI_KEY = process.env.OPENAI_API_KEY || "";
 
 const geminiClients = GEMINI_KEYS.map(key => new GoogleGenAI({ apiKey: key }));
-const openaiClient = OPENAI_KEY ? new OpenAI({ apiKey: OPENAI_KEY, dangerAllowBrowser: true }) : null;
+const openaiClient = OPENAI_KEY ? new OpenAI({ apiKey: OPENAI_KEY, dangerouslyAllowBrowser: true }) : null;
 
 const EVAL_MODEL = "gemini-2.0-flash";
 const fallbackModel = "gpt-4o-mini";
