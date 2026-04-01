@@ -490,12 +490,25 @@ export interface FullReadingTest {
   passages: ReadingPassage[];
 }
 
+/**
+ * Generate a single reading section (passage) on demand.
+ * passageNumber: 1, 2, or 3.  Questions: 13, 13, 14 respectively.
+ */
+export const generateReadingSection = async (passageNumber: number, isAcademic: boolean = true): Promise<ReadingPassage> => {
+  const questionCounts: Record<number, number> = { 1: 13, 2: 13, 3: 14 };
+  const qCount = questionCounts[passageNumber] || 13;
+  return generateReadingPassage(true, isAcademic, qCount);
+};
+
+/**
+ * @deprecated Use generateReadingSection for section-wise loading.
+ * Kept for backward compatibility — generates all 3 passages sequentially.
+ */
 export const generateFullReadingTest = async (isAcademic: boolean = true): Promise<FullReadingTest> => {
-  const passages = await Promise.all([
-    generateReadingPassage(true, isAcademic),
-    generateReadingPassage(true, isAcademic),
-    generateReadingPassage(true, isAcademic)
-  ]);
+  const passages: ReadingPassage[] = [];
+  for (let i = 1; i <= 3; i++) {
+    passages.push(await generateReadingSection(i, isAcademic));
+  }
   return { passages };
 };
 
@@ -503,14 +516,24 @@ export interface FullListeningTest {
   sections: ListeningTask[];
 }
 
+/**
+ * Generate a single listening section on demand.
+ * sectionNumber: 1-4.  Each section has exactly 10 questions.
+ */
+export const generateListeningSection = async (sectionNumber: number): Promise<ListeningTask> => {
+  return generateListeningTask(sectionNumber, true);
+};
+
+/**
+ * @deprecated Use generateListeningSection for section-wise loading.
+ * Kept for backward compatibility.
+ */
 export const generateFullListeningTest = async (): Promise<FullListeningTest> => {
   try {
-    const sections = await Promise.all([
-      generateListeningTask(1, true),
-      generateListeningTask(2, true),
-      generateListeningTask(3, true),
-      generateListeningTask(4, true)
-    ]);
+    const sections: ListeningTask[] = [];
+    for (let i = 1; i <= 4; i++) {
+      sections.push(await generateListeningSection(i));
+    }
     return { sections };
   } catch (error) {
     console.warn('Gemini API failed for full listening test, using sample data:', error);
@@ -599,27 +622,73 @@ export interface ReadingPassage {
     text: string;
     options?: string[];
     answer: string;
-    type: 'mcq' | 'matching' | 'gap-fill';
+    type: 'mcq' | 'matching' | 'gap-fill' | 'true-false-ng' | 'sentence-completion' | 'summary-completion' | 'short-answer' | 'classification' | 'heading-matching';
   }>;
 }
 
 let readingPassageIdx = 0;
 const sampleReadingPassages = [sampleReadingPassage, sampleReadingPassage2, sampleReadingPassage3];
 
-export const generateReadingPassage = async (isFullTest: boolean = false, isAcademic: boolean = true): Promise<ReadingPassage> => {
+/**
+ * Generate a single reading passage with a specific question count.
+ * @param isFullTest - true for full test (longer passage)
+ * @param isAcademic - academic vs general training
+ * @param questionCount - exact number of questions to generate (default 13 for full, 5 for quick)
+ */
+export const generateReadingPassage = async (isFullTest: boolean = false, isAcademic: boolean = true, questionCount?: number): Promise<ReadingPassage> => {
   const getFallback = () => {
     const passage = { ...sampleReadingPassages[readingPassageIdx % sampleReadingPassages.length] };
     readingPassageIdx++;
     return passage;
   };
 
+  const qCount = questionCount ?? (isFullTest ? 13 : 5);
+
+  const READING_QUESTION_TYPES = [
+    'Multiple Choice (single answer from A-D)',
+    'Multiple Choice (multiple answers)',
+    'True / False / Not Given',
+    'Yes / No / Not Given',
+    'Matching Information',
+    'Matching Headings',
+    'Matching Features',
+    'Matching Sentence Endings',
+    'Sentence Completion',
+    'Summary / Note / Table / Flow-Chart Completion',
+    'Short Answer Questions'
+  ];
+
   try {
-    const questionCount = isFullTest ? 13 : 5;
+    const topics = [
+      'Marine Biology', 'Archaeology', 'Linguistics', 'Space Exploration', 'Psychology',
+      'Climate Science', 'Ancient Civilizations', 'Biotechnology', 'Urban Planning',
+      'Neuroscience', 'Renewable Energy', 'Agricultural Innovation', 'Art History',
+      'Sociology', 'Materials Science', 'Animal Behavior', 'Economics'
+    ];
+    const randomTopic = topics[Math.floor(Math.random() * topics.length)];
+    const seed = Math.floor(Math.random() * 1000000);
+
     const response = await executeAIRequest({
-      userPrompt: `Generate an IELTS ${isAcademic ? 'Academic' : 'General Training'} Reading passage (approx ${isFullTest ? '800' : '400'} words) on a random topic. 
-      ${isAcademic ? 'The topic should be academic in nature.' : 'The topic should be related to everyday life or work-related contexts.'}
-      Include ${questionCount} questions of various types (MCQ, Matching, Gap-fill).
-      Return the response in JSON format.`,
+      userPrompt: `Generate an IELTS ${isAcademic ? 'Academic' : 'General Training'} Reading passage.
+
+TOPIC: ${randomTopic} (seed: ${seed})
+WORD COUNT: The passage MUST be between ${isFullTest ? '700-900' : '350-500'} words. This is CRITICAL — do NOT generate a short passage.
+PARAGRAPHS: The passage MUST contain at least ${isFullTest ? '5' : '3'} clearly separated paragraphs of substantial text.
+
+QUESTION REQUIREMENTS:
+- Generate EXACTLY ${qCount} questions. Not ${qCount - 1}, not ${qCount + 1}. Exactly ${qCount}.
+- Use a MIX of these official IELTS Academic Reading question types: ${READING_QUESTION_TYPES.slice(0, 6).join(', ')}.
+- For Multiple Choice questions, provide exactly 4 options (A, B, C, D).
+- For True/False/Not Given or Yes/No/Not Given, the answer MUST be one of: "True", "False", "Not Given" (or Yes/No/Not Given).
+- For gap-fill / sentence completion, use "_____" as the blank placeholder in the question text.
+- Every question MUST have a correct answer that can be found in or inferred from the passage.
+
+CRITICAL RULES:
+1. The "content" field MUST contain the FULL passage text. NEVER return empty content.
+2. Each question must have a unique "id" field (e.g., "q1", "q2", etc.).
+3. The passage must be coherent, academic, and factually plausible.
+
+Return JSON only.`,
       responseSchema: {
         type: Type.OBJECT,
         properties: {
@@ -634,7 +703,7 @@ export const generateReadingPassage = async (isFullTest: boolean = false, isAcad
                 text: { type: Type.STRING },
                 options: { type: Type.ARRAY, items: { type: Type.STRING } },
                 answer: { type: Type.STRING },
-                type: { type: Type.STRING, enum: ['mcq', 'matching', 'gap-fill'] }
+                type: { type: Type.STRING, enum: ['mcq', 'matching', 'gap-fill', 'true-false-ng', 'sentence-completion', 'summary-completion', 'short-answer'] }
               },
               required: ["id", "text", "answer", "type"]
             }
@@ -645,7 +714,24 @@ export const generateReadingPassage = async (isFullTest: boolean = false, isAcad
     });
 
     const data = JSON.parse(response.text || "{}");
-    return { id: Date.now().toString(), ...data };
+
+    // VALIDATION: Ensure content is not empty and questions exist
+    if (!data.content || data.content.trim().length < 100) {
+      console.warn('[Reading] AI returned empty or too-short content, using fallback');
+      return getFallback();
+    }
+    if (!data.questions || data.questions.length === 0) {
+      console.warn('[Reading] AI returned no questions, using fallback');
+      return getFallback();
+    }
+
+    // Pad question IDs if missing
+    data.questions = data.questions.map((q: any, i: number) => ({
+      ...q,
+      id: q.id || `q${i + 1}_${Date.now()}`
+    }));
+
+    return { id: Date.now().toString() + '_' + Math.random().toString(36).slice(2, 6), ...data };
   } catch (error) {
     console.warn('AI failed for Reading, using sample data:', error);
     return getFallback();
@@ -905,14 +991,33 @@ export interface ListeningTask {
 }
 
 export const generateListeningTask = async (section: number, isFullTest: boolean = false): Promise<ListeningTask> => {
+  const SECTION_CONTEXTS: Record<number, string> = {
+    1: 'a conversation between two people in an everyday social context (e.g., booking a hotel, making an appointment)',
+    2: 'a monologue in an everyday social context (e.g., a speech about local facilities, a tour guide)',
+    3: 'a conversation between up to four people in an educational or training context (e.g., a university tutorial, group discussion)',
+    4: 'a monologue on an academic subject (e.g., a university lecture)'
+  };
+  const context = SECTION_CONTEXTS[section] || SECTION_CONTEXTS[1];
+  const questionCount = isFullTest ? 10 : 5;
+
   try {
-    const questionCount = isFullTest ? 10 : 5;
     const response = await executeAIRequest({
       model: "gemini-1.5-flash",
-      userPrompt: `Generate an IELTS Listening Section ${section} task. 
-      Include a title, a full transcript for the audio, and ${questionCount} questions (mix of gap-fill and MCQ).
-      For gap-fill, use "_____" in the question text.
-      Return the response in JSON format.`,
+      userPrompt: `Generate an IELTS Listening Section ${section} task.
+
+SCENARIO: ${context}
+
+REQUIREMENTS:
+1. Title: A descriptive title for this section.
+2. Transcript: A FULL, detailed audio transcript (at least ${isFullTest ? '300' : '150'} words). This MUST NOT be empty.
+3. Questions: Generate EXACTLY ${questionCount} questions. Not ${questionCount - 1}, not ${questionCount + 1}.
+   - Use a mix of gap-fill and MCQ types.
+   - For gap-fill questions, use "_____" as the blank in the question text.
+   - For MCQ questions, provide exactly 4 options.
+   - Every answer must be findable in the transcript.
+4. Each question must have a unique "id" (e.g., "s${section}_q1", "s${section}_q2", etc.).
+
+Return ONLY valid JSON.`,
       responseSchema: {
         type: Type.OBJECT,
         properties: {
@@ -938,7 +1043,26 @@ export const generateListeningTask = async (section: number, isFullTest: boolean
     });
 
     const data = JSON.parse(response.text || "{}");
-    return { id: Date.now().toString(), section, ...data };
+
+    // VALIDATION
+    if (!data.transcript || data.transcript.trim().length < 50) {
+      console.warn(`[Listening] Section ${section}: AI returned empty transcript, using fallback`);
+      const fallback = sampleListeningSections[section - 1] || sampleListeningSections[0];
+      return { ...fallback, id: Date.now().toString() + section };
+    }
+    if (!data.questions || data.questions.length === 0) {
+      console.warn(`[Listening] Section ${section}: AI returned no questions, using fallback`);
+      const fallback = sampleListeningSections[section - 1] || sampleListeningSections[0];
+      return { ...fallback, id: Date.now().toString() + section };
+    }
+
+    // Ensure unique IDs
+    data.questions = data.questions.map((q: any, i: number) => ({
+      ...q,
+      id: q.id || `s${section}_q${i + 1}_${Date.now()}`
+    }));
+
+    return { id: Date.now().toString() + '_s' + section, section, ...data };
   } catch (error) {
     console.warn(`AI failed for Listening Section ${section}, using sample data:`, error);
     const fallback = sampleListeningSections[section - 1] || sampleListeningSections[0];

@@ -76,6 +76,7 @@ export default function TeacherDashboard() {
   // Modals
   const [isClassModalOpen, setIsClassModalOpen] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [managingClass, setManagingClass] = useState<Class | null>(null);
   const [isStudentModalOpen, setIsStudentModalOpen] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -251,7 +252,40 @@ export default function TeacherDashboard() {
       setIsStudentModalOpen(false);
       setNewStudent({ name: '', email: '', classId: '' });
     } catch (error) {
-      toast.error("Failed to enroll student");
+      console.error(error);
+      toast.error('Failed to update student assignment');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleToggleStudentInClass = async (studentId: string, currentClass: Class) => {
+    setIsSubmitting(true);
+    try {
+      const classRef = doc(db, 'classes', currentClass.id);
+      const userRef = doc(db, 'users', studentId);
+      
+      let updatedStudentIds = [...currentClass.studentIds];
+      let newClassId: string | null = currentClass.id;
+      
+      if (updatedStudentIds.includes(studentId)) {
+        // Remove
+        updatedStudentIds = updatedStudentIds.filter(id => id !== studentId);
+        newClassId = null;
+      } else {
+        // Add
+        updatedStudentIds.push(studentId);
+      }
+      
+      setManagingClass({...currentClass, studentIds: updatedStudentIds});
+
+      await updateDoc(classRef, { studentIds: updatedStudentIds });
+      await updateDoc(userRef, { classId: newClassId });
+      
+      toast.success(newClassId ? 'Student enrolled in class' : 'Student removed from class');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to update class enrollment');
     } finally {
       setIsSubmitting(false);
     }
@@ -443,15 +477,27 @@ export default function TeacherDashboard() {
                                   initial={{ opacity: 0, y: 10, scale: 0.95 }}
                                   animate={{ opacity: 1, y: 0, scale: 1 }}
                                   exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                  className="absolute right-0 top-full mt-2 w-48 bg-surface border border-line rounded-xl shadow-2xl z-40 py-2 overflow-hidden"
-                                >
-                                  <button className="w-full px-4 py-2 text-left text-xs font-bold text-ink hover:bg-primary/5 hover:text-primary flex items-center gap-2 transition-colors">
-                                    <Users size={14} /> Manage Students
-                                  </button>
-                                  <button className="w-full px-4 py-2 text-left text-xs font-bold text-ink hover:bg-primary/5 hover:text-primary flex items-center gap-2 transition-colors">
-                                    <PenTool size={14} /> Assign Task
-                                  </button>
-                                  <div className="h-px bg-line my-1" />
+                                    className="absolute right-0 top-full mt-2 w-48 bg-surface border border-line rounded-xl shadow-2xl z-40 py-2 overflow-hidden"
+                                  >
+                                    <button 
+                                      onClick={() => {
+                                        setManagingClass(c);
+                                        setActiveMenuId(null);
+                                      }}
+                                      className="w-full px-4 py-2 text-left text-xs font-bold text-ink hover:bg-primary/5 hover:text-primary flex items-center gap-2 transition-colors"
+                                    >
+                                      <Users size={14} /> Manage Students
+                                    </button>
+                                    <button 
+                                      onClick={() => {
+                                        // setAssignTaskClassId(c.id); // Placeholder for task assignment functionality
+                                        setActiveMenuId(null);
+                                      }}
+                                      className="w-full px-4 py-2 text-left text-xs font-bold text-ink hover:bg-primary/5 hover:text-primary flex items-center gap-2 transition-colors"
+                                    >
+                                      <PenTool size={14} /> Assign Task
+                                    </button>
+                                    <div className="h-px bg-line my-1" />
                                   <button 
                                     onClick={() => {
                                       const newStatus = c.status === 'archived' ? 'active' : 'archived';
@@ -501,7 +547,12 @@ export default function TeacherDashboard() {
                           {c.studentIds.length} Students enrolled
                         </p>
                       </div>
-                      <button className="w-full mt-6 py-2 bg-bg hover:bg-primary hover:text-white rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2">
+                      <button 
+                        onClick={() => {
+                          setManagingClass(c);
+                        }}
+                        className="w-full mt-6 py-2 bg-bg hover:bg-primary hover:text-white rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2"
+                      >
                         Manage Class <ChevronRight size={14} />
                       </button>
                     </div>
@@ -723,42 +774,122 @@ export default function TeacherDashboard() {
       {/* Modals */}
       <AnimatePresence>
         {isClassModalOpen && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }} 
-              animate={{ opacity: 1 }} 
-              exit={{ opacity: 0 }} 
-              onClick={() => setIsClassModalOpen(false)}
-              className="absolute inset-0 bg-ink/40 backdrop-blur-sm"
-            />
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="relative bg-surface w-full max-w-md rounded-2xl shadow-2xl p-6 md:p-8 border border-line max-h-[90vh] overflow-y-auto"
-            >
-              <h3 className="text-2xl font-serif italic text-primary mb-6">Create New Cohort</h3>
-              <form onSubmit={handleAddClass} className="space-y-6">
-                <div className="flex flex-col gap-2">
-                  <label className="text-[10px] uppercase tracking-widest font-bold text-ink-muted ml-1 mb-1">Class Name</label>
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/40 backdrop-blur-sm"
+          >
+            <div className="bg-bg w-full max-w-md rounded-3xl shadow-2xl p-6 relative">
+              <button 
+                onClick={() => setIsClassModalOpen(false)}
+                className="absolute top-4 right-4 text-ink-muted hover:text-ink transition-colors"
+              >
+                <X size={20} />
+              </button>
+              <div className="flex items-center gap-3 mb-6">
+                <Layout className="text-primary" size={24} />
+                <h3 className="text-xl font-serif text-primary">Create New Cohort</h3>
+              </div>
+              <form onSubmit={handleAddClass} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-ink-muted uppercase tracking-widest mb-2">Class Name</label>
                   <input 
                     type="text" 
-                    required 
                     value={newClass.name}
                     onChange={(e) => setNewClass({ name: e.target.value })}
-                    className="scholar-input"
-                    placeholder="e.g., IELTS Advanced Academic - Batch A"
+                    className="w-full px-4 py-3 bg-surface border border-line rounded-xl outline-none focus:border-primary transition-all text-sm"
+                    placeholder="e.g. Intensive Reading Group A"
+                    required
                   />
                 </div>
-                <div className="flex gap-4 pt-4">
-                  <button type="button" onClick={() => setIsClassModalOpen(false)} className="flex-1 scholar-button-secondary py-3">Cancel</button>
-                  <button type="submit" disabled={isSubmitting} className="flex-1 scholar-button-primary py-3 flex items-center justify-center gap-2">
-                    {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : "Create Class"}
+                <div className="flex justify-end gap-3 pt-4 border-t border-line">
+                  <button 
+                    type="button" 
+                    onClick={() => setIsClassModalOpen(false)}
+                    className="px-4 py-2 font-bold text-sm text-ink-muted hover:text-ink transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit" 
+                    disabled={isSubmitting}
+                    className="scholar-button-primary disabled:opacity-50"
+                  >
+                    {isSubmitting ? 'Creating...' : 'Create Class'}
                   </button>
                 </div>
               </form>
-            </motion.div>
-          </div>
+            </div>
+          </motion.div>
+        )}
+        
+        {managingClass && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/40 backdrop-blur-sm"
+          >
+            <div className="bg-bg w-full max-w-lg rounded-3xl shadow-2xl p-6 relative">
+              <button onClick={() => setManagingClass(null)} className="absolute top-4 right-4 text-ink-muted hover:text-ink transition-colors"><X size={20}/></button>
+              <div className="flex items-center gap-3 mb-6">
+                <Users className="text-primary" size={24} />
+                <div>
+                   <h3 className="text-xl font-serif text-primary">Manage Class Roster</h3>
+                   <p className="text-xs text-ink-muted uppercase tracking-widest">{managingClass.name}</p>
+                </div>
+              </div>
+              
+              <div className="max-h-[60vh] overflow-y-auto pr-2 space-y-2">
+                 {students.length === 0 ? (
+                   <div className="py-12 text-center text-ink-muted italic border-2 border-dashed border-line rounded-2xl">
+                     No scholars available in your roster to enroll.
+                   </div>
+                 ) : (
+                   students.map(s => {
+                     const isEnrolled = managingClass.studentIds.includes(s.uid);
+                     return (
+                       <div key={s.uid} className="flex items-center justify-between p-3 border border-line rounded-xl hover:bg-surface/50 transition-colors">
+                          <div className="flex items-center gap-3">
+                             <img src={s.avatar} alt="Avatar" className="w-8 h-8 rounded-full border border-line" referrerPolicy="no-referrer" />
+                             <div>
+                               <p className="font-bold text-sm text-ink">{s.name}</p>
+                               <p className="text-[10px] text-ink-muted">{s.email}</p>
+                             </div>
+                          </div>
+                          <button 
+                             onClick={() => handleToggleStudentInClass(s.uid, managingClass)}
+                             disabled={isSubmitting}
+                             className={cn(
+                               "px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2",
+                               isEnrolled 
+                                 ? "bg-primary/10 text-primary hover:bg-error/10 hover:text-error" 
+                                 : "bg-surface border border-line hover:border-primary text-ink-muted hover:text-primary",
+                               isSubmitting && "opacity-50 cursor-not-allowed"
+                             )}
+                          >
+                             {isEnrolled ? (
+                               <><Check size={14} /> Enrolled</>
+                             ) : (
+                               <><Plus size={14} /> Enroll</>
+                             )}
+                          </button>
+                       </div>
+                     )
+                   })
+                 )}
+              </div>
+              <div className="pt-4 mt-4 flex justify-end">
+                <button 
+                  onClick={() => setManagingClass(null)}
+                  className="px-4 py-2 font-bold text-sm text-ink-muted hover:text-ink transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </motion.div>
         )}
 
         {isStudentModalOpen && (
