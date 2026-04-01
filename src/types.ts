@@ -71,6 +71,7 @@ export interface Class {
   id: string;
   name: string;
   teacherId: string;
+  classCode: string;
   studentIds: string[];
   createdAt: string;
   status?: 'active' | 'archived';

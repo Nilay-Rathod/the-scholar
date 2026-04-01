@@ -26,7 +26,10 @@ import {
   X,
   Loader2,
   Trash2,
-  Archive
+  Archive,
+  Copy,
+  RefreshCcw,
+  Link as LinkIcon
 } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { 
@@ -47,7 +50,7 @@ import {
 } from 'firebase/firestore';
 import { useAuth } from '../App';
 import { Class, Student, PracticeAttempt, TestContent, ScheduledTask, Notification } from '../types';
-import { cn } from '../lib/utils';
+import { cn, generateClassCode } from '../lib/utils';
 import { toast } from 'sonner';
 import AdminEvaluationReview from '../components/AdminEvaluationReview';
 
@@ -167,6 +170,7 @@ export default function TeacherDashboard() {
       const classData = {
         name: newClass.name.trim(),
         teacherId: user.uid,
+        classCode: generateClassCode(),
         studentIds: [],
         createdAt: serverTimestamp(),
         status: 'active'
@@ -180,6 +184,17 @@ export default function TeacherDashboard() {
       toast.error("Failed to create class. Please check your connection.");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleResetClassCode = async (classId: string) => {
+    try {
+      const newCode = generateClassCode();
+      await updateDoc(doc(db, 'classes', classId), { classCode: newCode });
+      toast.success(`New class code generated: ${newCode}`);
+    } catch (error) {
+      console.error("Error resetting class code:", error);
+      toast.error("Failed to reset class code.");
     }
   };
 
@@ -497,6 +512,15 @@ export default function TeacherDashboard() {
                                     >
                                       <PenTool size={14} /> Assign Task
                                     </button>
+                                    <button 
+                                      onClick={() => {
+                                        handleResetClassCode(c.id);
+                                        setActiveMenuId(null);
+                                      }}
+                                      className="w-full px-4 py-2 text-left text-xs font-bold text-ink hover:bg-primary/5 hover:text-primary flex items-center gap-2 transition-colors"
+                                    >
+                                      <RefreshCcw size={14} /> {c.classCode ? 'Reset Join Code' : 'Generate Join Code'}
+                                    </button>
                                     <div className="h-px bg-line my-1" />
                                   <button 
                                     onClick={() => {
@@ -547,6 +571,46 @@ export default function TeacherDashboard() {
                           {c.studentIds.length} Students enrolled
                         </p>
                       </div>
+
+                      <div className="mt-4 p-3 bg-bg rounded-xl border border-line flex items-center justify-between group/code relative overflow-hidden">
+                        <div className="relative z-10">
+                          <p className="text-[8px] uppercase tracking-tighter font-bold text-ink-muted">Join Code</p>
+                          <p className="text-sm font-mono font-black text-primary mt-0.5">{c.classCode || '------'}</p>
+                        </div>
+                        <div className="flex items-center gap-1 relative z-10">
+                          <button 
+                            onClick={() => {
+                              if (!c.classCode) {
+                                toast.error("Please generate a code first via menu");
+                                return;
+                              }
+                              navigator.clipboard.writeText(c.classCode);
+                              toast.success("Code copied to clipboard!");
+                            }}
+                            className="p-2 hover:bg-primary/10 rounded-lg transition-colors text-primary"
+                            title="Copy Code"
+                          >
+                            <Copy size={16} />
+                          </button>
+                          <button 
+                            onClick={() => {
+                              if (!c.classCode) {
+                                toast.error("Please generate a code first via menu");
+                                return;
+                              }
+                              const joinLink = `${window.location.origin}/join/${c.classCode}`;
+                              navigator.clipboard.writeText(joinLink);
+                              toast.success("Invite link copied!");
+                            }}
+                            className="p-2 hover:bg-primary/10 rounded-lg transition-colors text-primary"
+                            title="Copy Join Link"
+                          >
+                            <LinkIcon size={16} />
+                          </button>
+                        </div>
+                        <div className="absolute right-0 top-0 w-12 h-full bg-gradient-to-l from-primary/5 to-transparent pointer-events-none" />
+                      </div>
+
                       <button 
                         onClick={() => {
                           setManagingClass(c);

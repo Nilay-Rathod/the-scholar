@@ -52,6 +52,7 @@ import ShortPractice from './screens/ShortPractice';
 import Login from './screens/Login';
 import SitePage from './screens/SitePage';
 import TeacherDashboard from './screens/TeacherDashboard';
+import JoinClassHandler from './screens/JoinClassHandler';
 import NotificationPanel from './components/NotificationPanel';
 
 // Auth Context
@@ -270,6 +271,7 @@ const AppContent = ({ notifications, onMarkAllRead }: { notifications: Notificat
               <Route path="/practice/short" element={<ProtectedRoute><ShortPractice /></ProtectedRoute>} />
               <Route path="/evaluation/:id" element={<ProtectedRoute><EvaluationReport /></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute><SettingsScreen /></ProtectedRoute>} />
+              <Route path="/join/:code" element={<JoinClassHandler />} />
               <Route path="/:path" element={<SitePage />} />
             </Routes>
           </AnimatePresence>

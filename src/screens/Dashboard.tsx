@@ -15,7 +15,13 @@ import {
   Zap,
   Loader2,
   Clock,
-  FileText
+  FileText,
+  Copy,
+  CheckCircle2,
+  AlertCircle,
+  X,
+  ArrowRight,
+  Plus
 } from 'lucide-react';
 import { 
   AreaChart, 
@@ -27,7 +33,7 @@ import {
   ResponsiveContainer 
 } from 'recharts';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { collection, query, where, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, orderBy, limit, onSnapshot, getDocs, updateDoc, doc, arrayUnion } from 'firebase/firestore';
 import { useAuth } from '../App';
 import { PracticeAttempt, Student } from '../types';
 import { cn } from '../lib/utils';
@@ -74,6 +80,9 @@ export default function Dashboard() {
   const [scheduledTasks, setScheduledTasks] = useState<any[]>([]);
   const [assignments, setAssignments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [joining, setJoining] = useState(false);
+  const [classCode, setClassCode] = useState('');
+  const [currentClass, setCurrentClass] = useState<any>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -143,12 +152,76 @@ export default function Dashboard() {
       handleFirestoreError(error, OperationType.LIST, 'assignments');
     });
 
+    // Listen to current class info if enrolled
+    let unsubscribeClass: (() => void) | undefined;
+    if (user.role === 'student' && (user as Student).classId) {
+      const classRef = doc(db, 'classes', (user as Student).classId!);
+      unsubscribeClass = onSnapshot(classRef, (snap) => {
+        if (snap.exists()) {
+          setCurrentClass({ id: snap.id, ...snap.data() });
+        }
+      });
+    }
+
     return () => {
       unsubscribeAttempts();
       unsubscribeSchedule();
       unsubscribeAssignments();
+      if (unsubscribeClass) unsubscribeClass();
     };
   }, [user]);
+
+  const handleJoinClass = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || user.role !== 'student') return;
+    if (!classCode.trim()) {
+      toast.error("Please enter a class code");
+      return;
+    }
+
+    const student = user as Student;
+    if (student.classId) {
+      toast.error("You are already enrolled in a class. Please contact your teacher to move classes.");
+      return;
+    }
+
+    setJoining(true);
+    try {
+      // Find class by code (exact match)
+      const q = query(collection(db, 'classes'), where('classCode', '==', classCode.trim()));
+      const snap = await getDocs(q);
+
+      if (snap.empty) {
+        toast.error("Invalid class code. Please check and try again.");
+        return;
+      }
+
+      const classDoc = snap.docs[0];
+      const classData = classDoc.data();
+
+      // Enroll student
+      const batch = []; // We can't use real batch with arrayUnion easily in some versions, but updateDoc is fine
+      
+      // Update student record
+      await updateDoc(doc(db, 'users', user.uid), {
+        classId: classDoc.id,
+        teacherId: classData.teacherId
+      });
+
+      // Update class record
+      await updateDoc(doc(db, 'classes', classDoc.id), {
+        studentIds: arrayUnion(user.uid)
+      });
+
+      toast.success(`Successfully joined "${classData.name}"!`);
+      setClassCode('');
+    } catch (error) {
+      console.error("Error joining class:", error);
+      toast.error("Failed to join class. Please try again.");
+    } finally {
+      setJoining(false);
+    }
+  };
 
   const chartData = attempts.slice().reverse().map(a => ({
     name: new Date(a.date).toLocaleDateString('en-US', { month: 'short' }),
@@ -303,6 +376,52 @@ export default function Dashboard() {
 
         {/* Upcoming Tasks & Recent Activity */}
         <div className="flex flex-col gap-6">
+          {/* Class Enrollment Section */}
+          <div className="scholar-card border-primary/20 bg-primary/[0.02]">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-serif italic text-primary">Classroom</h3>
+              <GraduationCap size={20} className="text-primary" />
+            </div>
+            
+            {currentClass ? (
+              <div className="space-y-3">
+                <div className="p-3 bg-white rounded-xl border border-line shadow-sm">
+                  <p className="text-[8px] uppercase tracking-widest font-bold text-ink-muted">Enrolled In</p>
+                  <p className="text-sm font-bold text-ink truncate mt-1">{currentClass.name}</p>
+                  <div className="flex items-center gap-2 mt-2 pt-2 border-t border-line/50">
+                    <CheckCircle2 size={12} className="text-emerald-500" />
+                    <span className="text-[10px] font-bold text-emerald-600 uppercase">Status: Active</span>
+                  </div>
+                </div>
+                <p className="text-[10px] text-ink-muted italic px-2">Need to change class? Contact your teacher.</p>
+              </div>
+            ) : (
+              <form onSubmit={handleJoinClass} className="space-y-4">
+                <p className="text-xs text-ink-muted">Join your teacher's class to receive assignments and feedback.</p>
+                <div className="relative group/input">
+                  <input 
+                    type="text" 
+                    value={classCode}
+                    onChange={(e) => setClassCode(e.target.value)}
+                    placeholder="Enter Class Code"
+                    className="w-full px-4 py-3 bg-white border border-line rounded-xl text-sm font-mono font-bold outline-none focus:border-primary transition-all group-hover/input:shadow-sm"
+                  />
+                  <div className="absolute inset-y-0 right-3 flex items-center">
+                    <Zap size={14} className="text-primary/30" />
+                  </div>
+                </div>
+                <button 
+                  type="submit"
+                  disabled={joining || !classCode.trim()}
+                  className="w-full py-3 bg-primary text-white rounded-xl text-xs font-bold hover:bg-primary-light transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:shadow-none"
+                >
+                  {joining ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
+                  Join Class
+                </button>
+              </form>
+            )}
+          </div>
+
           <div className="scholar-card">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-serif italic text-primary">Upcoming Tasks</h3>
