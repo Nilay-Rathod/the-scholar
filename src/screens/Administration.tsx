@@ -1454,8 +1454,9 @@ export default function Administration() {
                         <button 
                           onClick={(e) => {
                             e.stopPropagation();
-                            navigator.clipboard.writeText(c.classCode);
-                            toast.success('Code copied!');
+                            navigator.clipboard.writeText(c.classCode)
+                              .then(() => toast.success('Code copied!'))
+                              .catch(() => toast.error('Failed to copy code'));
                           }}
                           className="p-1.5 rounded-lg hover:bg-white text-ink-muted hover:text-secondary transition-all"
                           title="Copy Code"
@@ -1466,8 +1467,9 @@ export default function Administration() {
                           onClick={(e) => {
                             e.stopPropagation();
                             const link = `${window.location.origin}/join/${c.classCode}`;
-                            navigator.clipboard.writeText(link);
-                            toast.success('Invite link copied!');
+                            navigator.clipboard.writeText(link)
+                              .then(() => toast.success('Invite link copied!'))
+                              .catch(() => toast.error('Failed to copy link'));
                           }}
                           className="p-1.5 rounded-lg hover:bg-white text-ink-muted hover:text-secondary transition-all"
                           title="Copy Invite Link"

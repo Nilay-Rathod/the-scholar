@@ -579,13 +579,15 @@ export default function TeacherDashboard() {
                         </div>
                         <div className="flex items-center gap-1 relative z-10">
                           <button 
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               if (!c.classCode) {
                                 toast.error("Please generate a code first via menu");
                                 return;
                               }
-                              navigator.clipboard.writeText(c.classCode);
-                              toast.success("Code copied to clipboard!");
+                              navigator.clipboard.writeText(c.classCode)
+                                .then(() => toast.success("Code copied to clipboard!"))
+                                .catch(() => toast.error("Failed to copy code. Please copy manually."));
                             }}
                             className="p-2 hover:bg-primary/10 rounded-lg transition-colors text-primary"
                             title="Copy Code"
@@ -593,14 +595,19 @@ export default function TeacherDashboard() {
                             <Copy size={16} />
                           </button>
                           <button 
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               if (!c.classCode) {
                                 toast.error("Please generate a code first via menu");
                                 return;
                               }
                               const joinLink = `${window.location.origin}/join/${c.classCode}`;
-                              navigator.clipboard.writeText(joinLink);
-                              toast.success("Invite link copied!");
+                              navigator.clipboard.writeText(joinLink)
+                                .then(() => toast.success("Invite link copied!"))
+                                .catch(() => {
+                                  toast.error("Failed to copy link.");
+                                  console.error("Clipboard Error");
+                                });
                             }}
                             className="p-2 hover:bg-primary/10 rounded-lg transition-colors text-primary"
                             title="Copy Join Link"
