@@ -27,7 +27,9 @@ import {
   Trash2,
   Copy,
   Share2,
-  Archive
+  Archive,
+  RefreshCcw,
+  Link as LinkIcon
 } from 'lucide-react';
 import AdminEvaluationReview from '../components/AdminEvaluationReview';
 import StudentAnalytics from '../components/StudentAnalytics';
@@ -37,7 +39,7 @@ import { db, handleFirestoreError, OperationType, storage, auth } from '../fireb
 import { collection, onSnapshot, query, orderBy, setDoc, doc, serverTimestamp, addDoc, where as fsWhere, getDocs, limit, updateDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { Student } from '../types';
-import { cn } from '../lib/utils';
+import { cn, generateClassCode } from '../lib/utils';
 import { toast } from 'sonner';
 import { useAuth } from '../App';
 
@@ -383,7 +385,8 @@ export default function Administration() {
         teacherId: newClass.teacherId,
         studentIds: [],
         createdAt: serverTimestamp(),
-        status: 'active'
+        status: 'active',
+        classCode: generateClassCode()
       };
       
       console.log("[Diagnostic] Initiating class creation...", {
@@ -444,6 +447,20 @@ export default function Administration() {
       toast.error("Update failed");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleResetClassCode = async (classId: string) => {
+    try {
+      const newCode = generateClassCode();
+      await updateDoc(doc(db, 'classes', classId), {
+        classCode: newCode
+      });
+      toast.success('Class code updated!');
+      setActiveClassMenuId(null);
+    } catch (error) {
+      console.error('Error resetting class code:', error);
+      toast.error('Failed to reset class code');
     }
   };
 
@@ -1394,6 +1411,13 @@ export default function Administration() {
                                 {c.status === 'archived' ? <Check size={14} /> : <Archive size={14} />}
                                 {c.status === 'archived' ? 'Restore Class' : 'Archive Class'}
                               </button>
+                              <button 
+                                onClick={() => handleResetClassCode(c.id)}
+                                className="w-full px-4 py-2 text-left text-xs font-bold text-ink hover:bg-secondary/5 hover:text-secondary flex items-center gap-2 transition-colors"
+                              >
+                                <RefreshCcw size={14} /> 
+                                {c.classCode ? 'Reset Join Code' : 'Generate Join Code'}
+                              </button>
                               <div className="h-px bg-line my-1" />
                               <button 
                                 onClick={() => handleDeleteClass(c.id)}
@@ -1415,6 +1439,45 @@ export default function Administration() {
                       • {teachers.find(t => t.uid === c.teacherId)?.name || 'Unassigned'}
                     </span>
                   </div>
+
+                  {/* Class Code Section */}
+                  <div className="mb-4 p-3 bg-bg border border-line rounded-xl flex items-center justify-between group/code relative overflow-hidden">
+                    <div className="absolute inset-0 bg-secondary/5 opacity-0 group-hover/code:opacity-100 transition-opacity" />
+                    <div>
+                      <p className="text-[10px] font-bold text-ink-muted uppercase tracking-tighter">Join Code</p>
+                      <p className="text-sm font-mono font-bold text-secondary">
+                        {c.classCode || 'NO CODE'}
+                      </p>
+                    </div>
+                    {c.classCode && (
+                      <div className="flex gap-1 items-center">
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigator.clipboard.writeText(c.classCode);
+                            toast.success('Code copied!');
+                          }}
+                          className="p-1.5 rounded-lg hover:bg-white text-ink-muted hover:text-secondary transition-all"
+                          title="Copy Code"
+                        >
+                          <Copy size={12} />
+                        </button>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const link = `${window.location.origin}/join/${c.classCode}`;
+                            navigator.clipboard.writeText(link);
+                            toast.success('Invite link copied!');
+                          }}
+                          className="p-1.5 rounded-lg hover:bg-white text-ink-muted hover:text-secondary transition-all"
+                          title="Copy Invite Link"
+                        >
+                          <LinkIcon size={12} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
                   <button 
                     onClick={() => setSelectedCohortId(c.id)}
                     className="w-full mt-2 py-2 bg-bg hover:bg-secondary hover:text-white rounded-lg text-xs font-bold transition-all"
