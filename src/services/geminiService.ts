@@ -174,15 +174,20 @@ async function executeAIRequest(params: {
   // 3. Try Puter.js (Final AI Fallback)
   if (typeof puter !== 'undefined') {
     try {
-      console.log(`[AI-ROUTER]: OpenAI failed. Switching to Puter.js...`);
-      const systemMsg = params.systemPrompt ? `SYSTEM INSTRUCTION: ${params.systemPrompt}\n\n` : "";
-      const puterPrompt = `${systemMsg}${params.userPrompt}${params.responseSchema ? "\n\nCRITICAL: You MUST return ONLY a valid JSON object matching the requested schema." : ""}`;
-      
-      const response = await puter.ai.chat(puterPrompt);
-      return {
-        text: response.toString(),
-        audioContents: []
-      } as any;
+      const isSignedIn = puter.auth ? puter.auth.isSignedIn() : false;
+      if (isSignedIn) {
+        console.log(`[AI-ROUTER]: OpenAI failed. Switching to Puter.js...`);
+        const systemMsg = params.systemPrompt ? `SYSTEM INSTRUCTION: ${params.systemPrompt}\n\n` : "";
+        const puterPrompt = `${systemMsg}${params.userPrompt}${params.responseSchema ? "\n\nCRITICAL: You MUST return ONLY a valid JSON object matching the requested schema." : ""}`;
+        
+        const response = await puter.ai.chat(puterPrompt);
+        return {
+          text: response.toString(),
+          audioContents: []
+        } as any;
+      } else {
+        console.log(`[AI-ROUTER]: Puter.js skipped because user is not signed in to Puter.`);
+      }
     } catch (error: any) {
       console.warn("Puter.js fallback failed:", error.message);
     }
