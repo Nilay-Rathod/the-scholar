@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import { LogIn, Loader2, Sparkles, BookOpen, Users, GraduationCap, Check } from 'lucide-react';
 import { auth, googleProvider, signInWithPopup, db, handleFirestoreError, OperationType } from '../firebase';
 import { doc, getDoc, setDoc, collection, query, where, getDocs, updateDoc, deleteDoc } from 'firebase/firestore';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 
@@ -11,6 +11,8 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [loginRole, setLoginRole] = useState<'student' | 'teacher' | 'admin'>('student');
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectPath = searchParams.get('redirect');
 
   const handleLogin = async () => {
     setIsLoading(true);
@@ -127,7 +129,7 @@ export default function Login() {
       
 
       
-      navigate('/');
+      navigate(redirectPath || '/');
     } catch (error: any) {
       console.error('Login failed:', error);
       toast.error(error.message || "Login failed. Please try again.");

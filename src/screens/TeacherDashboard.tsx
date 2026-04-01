@@ -155,6 +155,38 @@ export default function TeacherDashboard() {
     };
   }, [user]);
 
+  // Auto-generate missing class codes
+  useEffect(() => {
+    const generateMissingCodes = async () => {
+      if (loading || classes.length === 0) return;
+      
+      const batches = [];
+      let hasUpdates = false;
+      
+      for (const c of classes) {
+        if (!c.classCode && c.status !== 'archived') {
+          console.log(`[TeacherDashboard] Generating missing code for class: ${c.name}`);
+          hasUpdates = true;
+          batches.push(updateDoc(doc(db, 'classes', c.id), {
+            classCode: generateClassCode()
+          }));
+        }
+      }
+      
+      if (hasUpdates) {
+        try {
+          await Promise.all(batches);
+          toast.success("Generated join codes for existing classes.");
+        } catch (error) {
+          console.error("Failed to auto-generate class codes:", error);
+        }
+      }
+    };
+    
+    const codeTimer = setTimeout(generateMissingCodes, 3000);
+    return () => clearTimeout(codeTimer);
+  }, [classes, loading]);
+
   const handleAddClass = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || (user.role !== 'teacher' && user.role !== 'admin')) {

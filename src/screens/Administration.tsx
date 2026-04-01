@@ -33,8 +33,8 @@ import {
 } from 'lucide-react';
 import AdminEvaluationReview from '../components/AdminEvaluationReview';
 import StudentAnalytics from '../components/StudentAnalytics';
-import CohortDetails from '../components/CohortDetails';
 import SampleResponseManager from '../components/SampleResponseManager';
+import { cn, generateClassCode } from '../lib/utils';
 import { db, handleFirestoreError, OperationType, storage, auth } from '../firebase';
 import { collection, onSnapshot, query, orderBy, setDoc, doc, serverTimestamp, addDoc, where as fsWhere, getDocs, limit, updateDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
@@ -141,6 +141,38 @@ export default function Administration() {
     const timer = setTimeout(createBscClass, 3000); // Wait 3s for data to settle
     return () => clearTimeout(timer);
   }, [user, classes]);
+
+  // Auto-generate missing class codes
+  useEffect(() => {
+    const generateMissingCodes = async () => {
+      if (loading || classes.length === 0) return;
+      
+      const batches = [];
+      let hasUpdates = false;
+      
+      for (const c of classes) {
+        if (!c.classCode && c.status !== 'archived') {
+          console.log(`[Auto-Maintenance] Generating missing code for class: ${c.name}`);
+          hasUpdates = true;
+          batches.push(updateDoc(doc(db, 'classes', c.id), {
+            classCode: generateClassCode()
+          }));
+        }
+      }
+      
+      if (hasUpdates) {
+        try {
+          await Promise.all(batches);
+          toast.success("Updated classes with missing join codes.");
+        } catch (error) {
+          console.error("Failed to auto-generate class codes:", error);
+        }
+      }
+    };
+    
+    const codeTimer = setTimeout(generateMissingCodes, 5000);
+    return () => clearTimeout(codeTimer);
+  }, [classes, loading]);
 
   useEffect(() => {
     if (editingTestId) return; // Don't reset when editing
